@@ -1,88 +1,98 @@
-# AWS Chatbot (Initial Scaffold)
+# AWS Chatbot Scaffold (Amplify + API Gateway + Lambda + DynamoDB)
 
-This repository now contains a minimal working chatbot scaffold:
-- Frontend chat UI (for AWS Amplify hosting)
-- Backend Lambda handler (for API Gateway invocation)
-- OpenAI Responses API integration
-- DynamoDB chat history load/save
+This repository contains a minimal chatbot scaffold for AWS.
 
-## Current project structure
+## Selected backend
 
-- `frontend/`
-  - `index.html`
-  - `src/main.js`
-  - `src/api.js`
-  - `src/styles.css`
-- `backend/lambda/`
-  - `index.js`
-  - `package.json`
-- `.env.example`
+**Primary backend**: `backend/lambda_chat/lambda_function.py` (Python 3.12).
 
-## Run locally
+There is also a Node.js Lambda under `backend/lambda/` from an earlier scaffold iteration. Treat that Node.js path as **optional/legacy** unless you intentionally choose to run it.
 
-### 1) Frontend
-Use any static file server from `frontend/`.
+## Required AWS resources
 
-Example:
-```bash
-cd frontend
-python3 -m http.server 4173
-```
-Then open `http://localhost:4173`.
+1. **DynamoDB table**: `ChatMessages`
+   - Partition key: `chatId` (String)
+   - Sort key: `createdAtMessageId` (String)
+2. **Secrets Manager secret**: `openai/chatbot/api-key`
+   - Store your OpenAI API key here (plain string or JSON with `OPENAI_API_KEY`)
+3. **Lambda function** (Python 3.12) using `backend/lambda_chat/lambda_function.py`
+4. **API Gateway** (HTTP API or REST API)
+   - Route `POST /chat` to Lambda proxy integration
+   - Route `OPTIONS /chat` to Lambda or configure equivalent CORS
+5. **Amplify Hosting** for `frontend/`
 
-TODO: For local browser testing, expose `VITE_API_BASE_URL` via your frontend build/runtime process.
-
-### 2) Lambda handler local test
-From `backend/lambda`:
-```bash
-npm install
-```
-
-You can invoke `handler` with a local event payload using your preferred Lambda local tooling.
-
-## AWS resources needed
-
-1. **AWS Amplify Hosting** for `frontend/`.
-2. **API Gateway HTTP API** with:
-   - `POST /chat` route integrated to Lambda
-   - `OPTIONS /chat` route (or automatic CORS in API Gateway)
-3. **AWS Lambda** for `backend/lambda/index.js`.
-4. **DynamoDB table** for chat history.
-   - TODO suggested keys:
-     - Partition key: `PK` (String)
-     - Sort key: `SK` (String)
-
-## Environment variables required
+## Required environment variables
 
 Set these on Lambda:
-- `OPENAI_API_KEY` (required, backend only)
-- `OPENAI_MODEL` (default: `gpt-4.1-nano`)
-- `CHAT_HISTORY_TABLE_NAME` (required)
-- `CORS_ALLOW_ORIGIN` (recommended)
+
+- `TABLE_NAME=ChatMessages`
+- `OPENAI_SECRET_NAME=openai/chatbot/api-key`
+- `OPENAI_MODEL=gpt-4.1-nano`
+- `ALLOWED_ORIGIN=*`
 
 Set this for frontend build/runtime:
-- `VITE_API_BASE_URL` = API Gateway base URL
 
-Never store `OPENAI_API_KEY` in frontend code.
+- `VITE_API_BASE_URL=https://YOUR_API_ID.execute-api.REGION.amazonaws.com`
+
+## Frontend behavior
+
+Frontend code (`frontend/src/api.js` and `frontend/src/main.js`) sends:
+
+```json
+{
+  "chatId": "...",
+  "message": "..."
+}
+```
+
+to:
+
+`POST ${VITE_API_BASE_URL}/chat`
+
+The browser stores and reuses `chatId` in `sessionStorage` for the current tab/session.
+
+## Lambda direct test
+
+You can test directly in Lambda console with this event:
+
+```json
+{
+  "httpMethod": "POST",
+  "body": "{\"chatId\":\"test-chat-1\",\"message\":\"Hello, reply with one short sentence.\"}"
+}
+```
+
+Expected response format:
+
+```json
+{
+  "chatId": "...",
+  "reply": "..."
+}
+```
+
+## Packaging / dependencies
+
+Dependencies may be supplied by a **Lambda Layer** (your current approach), or bundled as a zip package.
+
+See `backend/lambda_chat/README.md` for Python 3.12 packaging steps and IAM permission notes.
 
 ## Request flow
 
-1. User types a message in frontend UI.
-2. Frontend `sendChatMessage` POSTs to `POST /chat` on API Gateway.
+1. User sends message in Amplify frontend.
+2. Frontend POSTs `{ chatId, message }` to API Gateway `/chat`.
 3. API Gateway invokes Lambda.
-4. Lambda loads recent chat history from DynamoDB.
-5. Lambda sends history + new user message to OpenAI Responses API.
-6. Lambda stores user and assistant messages back in DynamoDB.
-7. Lambda returns assistant reply via API Gateway to frontend.
+4. Lambda loads latest chat history from DynamoDB, keeps chronological order, and appends current user message.
+5. Lambda calls OpenAI Responses API.
+6. Lambda stores user and assistant messages to DynamoDB.
+7. Lambda returns `{ chatId, reply }`.
 
-## Notes / TODOs
+## Security notes
 
-- TODO: Replace placeholder AWS resource values in `.env.example`.
-- TODO: Lock down `CORS_ALLOW_ORIGIN` to your actual Amplify domain.
-- TODO: Add authentication/authorization before production use.
-- TODO: Add input validation and rate limiting.
-- TODO: Add infra-as-code (CDK/SAM/Terraform) for repeatable setup.
+- Do **not** put OpenAI API keys in frontend files.
+- Do **not** hardcode secrets in Lambda code.
+- OpenAI key is loaded from Secrets Manager at runtime.
 
-## Not deployed yet
+## Not deployed
 
-As requested, this scaffold does **not** deploy resources automatically.
+This repo does **not** deploy resources automatically.

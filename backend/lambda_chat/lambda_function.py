@@ -68,10 +68,10 @@ def _message_sort_key(now_iso):
 def _load_chat_history(chat_id, limit=50):
     result = _table.query(
         KeyConditionExpression=Key("chatId").eq(chat_id),
-        ScanIndexForward=True,
+        ScanIndexForward=False,
         Limit=limit,
     )
-    items = result.get("Items", [])
+    items = list(reversed(result.get("Items", [])))
     return [{"role": item["role"], "content": item["content"]} for item in items]
 
 
@@ -95,6 +95,9 @@ def _extract_reply_text(response):
 
 def lambda_handler(event, context):
     method = event.get("httpMethod") or event.get("requestContext", {}).get("http", {}).get("method")
+    if method is None:
+        # Direct Lambda invocation convenience: default to POST when method is omitted.
+        method = "POST"
 
     if method == "OPTIONS":
         return {
@@ -132,5 +135,5 @@ def lambda_handler(event, context):
 
         return _response(200, {"chatId": chat_id, "reply": reply})
     except Exception as exc:
-        print(f"Error handling chat request: {exc}")
+        print(f"Error handling chat request for chatId={chat_id}: {type(exc).__name__}: {exc}")
         return _response(500, {"error": "Internal server error."})

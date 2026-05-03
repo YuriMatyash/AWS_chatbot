@@ -1,6 +1,6 @@
 const API_BASE_URL = import.meta?.env?.VITE_API_BASE_URL || window.__API_BASE_URL__;
 
-export async function sendChatMessage({ sessionId, message }) {
+export async function sendChatMessage({ chatId, message }) {
   if (!API_BASE_URL) {
     throw new Error('Missing API base URL. TODO: set VITE_API_BASE_URL for frontend.');
   }
@@ -10,7 +10,7 @@ export async function sendChatMessage({ sessionId, message }) {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ sessionId, message }),
+    body: JSON.stringify({ chatId, message }),
   });
 
   if (!response.ok) {
